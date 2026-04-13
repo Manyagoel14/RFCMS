@@ -57,70 +57,17 @@ public class RailwayDijkstra {
         List<Document> edges = mongoTemplate.findAll(Document.class, "graph");
 
         for (Document doc : edges) {
-            // Match WagonStatusEtaUpdaterService: graph rows may use source/destination or src/dest.
-            String src = readGraphStation(doc, "source", "src");
-            String dest = readGraphStation(doc, "destination", "dest");
-            Object distVal = doc.get("distance");
-            if (distVal == null) {
-                distVal = doc.get("distance_km");
-            }
-            if (src == null || dest == null || distVal == null) {
-                continue;
-            }
-            int dist;
-            if (distVal instanceof Number n) {
-                dist = (int) Math.round(n.doubleValue());
-            } else {
-                try {
-                    dist = (int) Math.round(Double.parseDouble(distVal.toString().trim()));
-                } catch (NumberFormatException ex) {
-                    continue;
-                }
-            }
-            if (dist < 0) {
-                continue;
-            }
+            String src = doc.getString("source");
+            String dest = doc.getString("destination");
+            int dist = doc.getInteger("distance");
 
             graph.putIfAbsent(src, new ArrayList<>());
-            graph.putIfAbsent(dest, new ArrayList<>());
+            graph.putIfAbsent(dest, new ArrayList<>()); // ✅ IMPORTANT
 
-            // Treat segments as bidirectional (same km both ways).
-            graph.get(src).add(new Edge(dest, dist));
-            graph.get(dest).add(new Edge(src, dist));
+            graph.get(src).add(new Edge(dest, dist));   //A → [(B, 5), (C, 10)]
         }
 
         return graph;
-    }
-
-    private static String readGraphStation(Document doc, String... fieldNames) {
-        for (String key : fieldNames) {
-            Object v = doc.get(key);
-            if (v == null) {
-                continue;
-            }
-            String s = v.toString().trim();
-            if (!s.isEmpty()) {
-                return s;
-            }
-        }
-        return null;
-    }
-
-    /** Map user/API station name to the vertex key used in the graph (case-insensitive). */
-    private static String canonicalVertex(Map<String, List<Edge>> graph, String name) {
-        if (name == null || name.isBlank()) {
-            return null;
-        }
-        String t = name.trim();
-        if (graph.containsKey(t)) {
-            return t;
-        }
-        for (String k : graph.keySet()) {
-            if (k != null && k.equalsIgnoreCase(t)) {
-                return k;
-            }
-        }
-        return null;
     }
 
     /** Call after bulk edits to `graph` collection if you need immediate fresh paths. */
@@ -183,32 +130,19 @@ public class RailwayDijkstra {
     public List<String> shortestPath(String start, String end) {
         Map<String, List<Edge>> graph = buildGraph();
 
-        String s = canonicalVertex(graph, start);
-        String e = canonicalVertex(graph, end);
-        if (s == null || e == null) {
-            String a = start != null ? start.trim() : "";
-            String b = end != null ? end.trim() : "";
-            return new ArrayList<>(List.of(a, b));
-        }
-
         Map<String, String> parent = new HashMap<>();
-        Map<String, Integer> dist = dijkstra(graph, s, parent);
+        Map<String, Integer> dist = dijkstra(graph, start, parent);
 
-        if (!dist.containsKey(e) || dist.get(e) == Integer.MAX_VALUE) {
-            return new ArrayList<>(List.of(s, e));
+        if (!dist.containsKey(end) || dist.get(end) == Integer.MAX_VALUE) {
+            return new ArrayList<>(List.of(start, end));
         }
-        return getPath(parent, e);
+        return getPath(parent, end);
     }
 
     public int shortestDistanceKm(String start, String end) {
         Map<String, List<Edge>> graph = buildGraph();
-        String s = canonicalVertex(graph, start);
-        String t = canonicalVertex(graph, end);
-        if (s == null || t == null) {
-            return Integer.MAX_VALUE;
-        }
-        Map<String, Integer> dist = dijkstra(graph, s, new HashMap<>());
-        return dist.getOrDefault(t, Integer.MAX_VALUE);
+        Map<String, Integer> dist = dijkstra(graph, start, new HashMap<>());
+        return dist.getOrDefault(end, Integer.MAX_VALUE);
     }
 
     /**

@@ -143,12 +143,9 @@ public class TrackingService {
             return response;
         }
 
-        // Not allocated yet → show at source station (map/API: single placeholder movement)
+        // Not allocated yet → show at source station
         if (route.size() == 1 && "IN_PROCESS".equalsIgnoreCase(route.get(0).getStatus())) {
-            var c = consignmentRepo.findByConsignmentNumber(cn).orElse(null);
-            boolean pending = c != null && (c.getAllocationStatus() == null
-                    || "PENDING".equalsIgnoreCase(c.getAllocationStatus()));
-            response.put("status", pending ? "AWAITING_WAGON_ASSIGNMENT" : "IN_PROCESS");
+            response.put("status", "IN_PROCESS");
             response.put("lastStation", route.get(0).getStation());
             response.put("progress", 0.0);
             return response;
@@ -183,7 +180,6 @@ public class TrackingService {
 
                 double progress = (double) done / total;
 
-                response.put("status", "IN_TRANSIT");
                 response.put("lastStation", curr.getStation());
                 response.put("nextStation", next.getStation());
                 response.put("progress", Math.min(progress, 1.0));

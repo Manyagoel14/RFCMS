@@ -6,7 +6,6 @@ import com.example.RFCMS.service.TrackingService;
 import com.example.RFCMS.repository.ConsignmentRepository;
 import com.example.RFCMS.repository.MovementRepository;
 import com.example.RFCMS.repository.WagonRepository;
-import com.example.RFCMS.models.Consignment;
 import com.example.RFCMS.models.Wagon;
 import com.example.RFCMS.models.Movement;
 import org.springframework.http.HttpStatus;
@@ -57,38 +56,15 @@ public class NetworkMapController {
 
     @GetMapping(value = "/track/{cn}", produces = MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<String> track(@PathVariable String cn) {
-        var consignmentOpt = consignmentRepository.findByConsignmentNumber(cn);
-        if (consignmentOpt.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .cacheControl(CacheControl.noStore())
-                    .body("<html><body><h3>Consignment not found: " + cn + "</h3></body></html>");
-        }
-        Consignment cons = consignmentOpt.get();
-        boolean notOnWagon = cons.getWagonId() == null || cons.getWagonId().isBlank();
-        boolean delivered = cons.getAllocationStatus() != null
-                && "DELIVERED".equalsIgnoreCase(cons.getAllocationStatus());
-        if (notOnWagon && !delivered) {
-            return ResponseEntity.ok()
-                    .cacheControl(CacheControl.noStore())
-                    .body("""
-                            <!doctype html>
-                            <html><head><meta charset="utf-8"/><title>RFCMS Tracking</title>
-                            <style>
-                              body { font-family: system-ui, sans-serif; margin: 48px; max-width: 520px; }
-                              h1 { font-size: 1.25rem; }
-                            </style>
-                            </head><body>
-                            <h1>Tracking</h1>
-                            <p>Consignment <code>%s</code> hasn&apos;t been assigned to a wagon yet.</p>
-                            <p>Check back after allocation assigns a wagon to this shipment.</p>
-                            </body></html>
-                            """.formatted(escapeHtml(cn)));
-        }
-
         Map<String, Object> pos = trackingService.getCurrentPosition(cn);
         String status = pos.get("status") != null ? pos.get("status").toString() : "UNKNOWN";
 
-        String wagonBusinessId = resolveToBusinessWagonId(cons.getWagonId());
+        String wagonBusinessId = consignmentRepository.findByConsignmentNumber(cn)
+                .map(c -> c.getWagonId())
+                .orElse(null);
+
+        // If consignment stored Mongo _id of wagon, resolve to business wagonid (e.g., W001)
+        wagonBusinessId = resolveToBusinessWagonId(wagonBusinessId);
 
         WagonStatusLookupService.WagonStatus ws = wagonStatusLookupService.getCurrentLegByWagonId(wagonBusinessId);
         // For animation: prefer wagon_status segment (current->next OR source->destination),
@@ -196,14 +172,6 @@ public class NetworkMapController {
                 .map(Wagon::getWagonId)
                 .filter(id -> id != null && !id.isBlank())
                 .orElse(wagonIdMaybe);
-    }
-
-    private static String escapeHtml(String s) {
-        if (s == null) return "";
-        return s.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;");
     }
 }
 

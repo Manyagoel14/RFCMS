@@ -21,9 +21,6 @@ public class ConsignmentService {
     private FreightService freightService;
 
     @Autowired
-    private RailwayDijkstra railwayDijkstra;
-
-    @Autowired
     private ConsignmentRepository consignmentRepository;
 
     @Autowired
@@ -31,9 +28,6 @@ public class ConsignmentService {
 
     // ---------------- BOOK ----------------
     public Consignment bookConsignment(Consignment c){
-
-        int distanceKm = resolveRouteDistanceKm(c.getSource(), c.getDestination());
-        c.setDistance(distanceKm);
 
         double freightCharge = freightService.calculateFreight(c);
         c.setFreightCharge(freightCharge);
@@ -54,38 +48,20 @@ public class ConsignmentService {
         return consignmentRepository.save(c);
     }
 
-    /** Shortest-path distance (km) from Mongo `graph` collection; 0 if missing or unreachable. */
-    private int resolveRouteDistanceKm(String source, String destination) {
-        if (source == null || destination == null) return 0;
-        String src = source.trim();
-        String dst = destination.trim();
-        if (src.isEmpty() || dst.isEmpty()) return 0;
-
-        int d = railwayDijkstra.shortestDistanceKm(src, dst);
-        if (d <= 0 || d == Integer.MAX_VALUE) {
-            return 0;
-        }
-        return d;
-    }
-
     private String generateConsignmentNumber() {
         // deterministic, readable, and sufficiently unique for this app
         return "CN" + System.currentTimeMillis();
     }
 
-    public String generateInvoiceOnPickup(String idOrConsignmentNumber) {
+    public String generateInvoiceOnPickup(String consignmentId) {
 
-        Optional<Consignment> optional = consignmentRepository.findById(idOrConsignmentNumber);
-        if (optional.isEmpty()) {
-            optional = consignmentRepository.findByConsignmentNumber(idOrConsignmentNumber);
-        }
+    Optional<Consignment> optional = consignmentRepository.findById(consignmentId);
 
-        if (optional.isEmpty()) {
-            return "Consignment not found!";
-        }
+    if (optional.isEmpty()) {
+        return "Consignment not found!";
+    }
 
-        Consignment consignment = optional.get();
-        String consignmentId = consignment.getId() != null ? consignment.getId() : idOrConsignmentNumber;
+    Consignment consignment = optional.get();
 
     if (!"ARRIVED".equals(consignment.getStatus())) {
         return "Consignment has not arrived yet!";

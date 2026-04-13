@@ -25,7 +25,7 @@ public class Consignment {
 
     // allocation
     private String wagonId;
-    private String allocationStatus; // PENDING / ASSIGNED / DELIVERED
+    private String allocationStatus; // PENDING / ASSIGNED
 
     // ✅ Proper timestamps
     private LocalDateTime bookingTimestamp;
